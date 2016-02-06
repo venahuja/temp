@@ -19,6 +19,11 @@ void* thread_wait_barrier(void* arg)
     return arg;
 }
 
+struct COND_VAR {
+    pthread_mutex_t* mutex;
+    pthread_cond_t*  cond_var;
+};
+
 int
 main()
 {
@@ -26,16 +31,17 @@ main()
     fprintf(f, "%d", getpid());
     fclose(f);
     
-    pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex    = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t  cond_var = PTHREAD_COND_INITIALIZER;
     pthread_barrier_t barrier;
     if (pthread_barrier_init(&barrier, 0, 2) != 0) {
         perror("[-] pthread_barrier_init");
         return -1;
     }
-    
-    pthread_barrier_wait(&barrier);
-    puts("main: barrier reached");
-    
+
+    struct COND_VAR cond_var_thread;
+    cond_var_thread.mutex = &mutex;
+    cond_var_thread.cond_var = &cond_var;
     pthread_t thread[2];
     void* thread_func[] = {
         thread_wait_condvar,
@@ -43,7 +49,7 @@ main()
     };
     void* thread_arg[] = {
         &cond_var,
-        &barrier
+        &cond_var_thread
     };
     
     int i = 0;
@@ -53,6 +59,8 @@ main()
             return -1;
         }
     }
+    pthread_barrier_wait(&barrier);
+    puts("main: barrier reached");
     puts("main: waiting till all threads will complete");
     
     for (i = 0; i < sizeof(thread)/sizeof(thread[0]); ++i) {
