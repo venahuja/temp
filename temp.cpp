@@ -1,92 +1,54 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
 
-void* thread_wait_mutex(void* arg)
+void* thread_wait_condvar(void* arg)
 {
-    pthread_mutex_t* mutex = (pthread_mutex_t*)arg;
-    pthread_mutex_lock(mutex);
-    puts("thread: mutex acquired");
-    pthread_mutex_unlock(mutex);
+    pthread_cond_t* cond_var = (pthread_cond_t*)arg;
+    pthread_cond_wait(cond_var);
+    puts("thread: conditional variable acquired");
     return arg;
 }
 
-void* thread_wait_spin(void* arg)
+void* thread_wait_barrier(void* arg)
 {
-    pthread_spinlock_t* spin_lock = (pthread_spinlock_t*)arg;
-    pthread_spin_lock(spin_lock);
-    puts("thread: spinlock acquired");
-    pthread_spin_unlock(spin_lock);
-    return arg;
-}
-
-void* thread_wait_rw_read(void* arg)
-{
-    pthread_rwlock_t* rw_lock = (pthread_rwlock_t*)arg;
-    pthread_rwlock_rdlock(rw_lock);
-    puts("thread: rwlock acquired for read");
-    pthread_rwlock_unlock(rw_lock);
-    return arg;
-}
-
-void* thread_wait_rw_write(void* arg)
-{
-    pthread_rwlock_t* rw_lock = (pthread_rwlock_t*)arg;
-    pthread_rwlock_wrlock(rw_lock);
-    puts("thread: rwlock acquired for write");
-    pthread_rwlock_unlock(rw_lock);
+    pthread_barrier_t* barrier = (pthread_barrier_t*)arg;
+    pthread_barrier_wait(barrier);
+    puts("thread: barrier reached");
     return arg;
 }
 
 int
 main()
 {
-    FILE* f = fopen("/home/box/main.pid");
-    fprintf("%d", getpid());
+    FILE* f = fopen("/home/box/main.pid", "w");
+    fprintf(f, "%d", getpid());
     fclose(f);
     
-    pthread_mutex_t  mutex   = PTHREAD_MUTEX_INITIALIZER;
-    pthread_rwlock_t rw_lock = PTHREAD_RWLOCK_INITIALIZER;
-    pthread_spinlock_t spin_lock;
-
-    if (pthread_spin_init(&spin_lock) != 0) {
-        perror("[-] pthread_spin_init");
+    pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
+    pthread_barrier_t barrier;
+    if (pthread_barrier_init(&barrier, 0, 2) != 0) {
+        perror("[-] pthread_barrier_init");
         return -1;
     }
-    if (pthread_spin_lock(&spin_lock) != 0) {
-        perror("[-] pthread_spin_lock");
-        return -1;
-    }
-    puts("main: spinlock acquired");
     
-    if (pthread_mutex_lock(&mutex) != 0) {
-        perror("[-] pthread_mutex_lock");
-        return -1;
-    }
-    puts("main: mutex acquired");
+    pthread_barrier_wait(&barrier);
+    puts("main: barrier reached");
     
-    if (pthread_rwlock_wrlock(&rw_lock) != 0) {
-        perror("[-] pthread_rwlock_wrlock");
-        return -1;
-    }
-    puts("main: rwlock acquired");
-    
-    pthread_t thread[4];
+    pthread_t thread[2];
     void* thread_func[] = {
-        thread_wait_mutex,
-        thread_wait_spin,
-        thread_wait_rw_read,
-        thread_wait_rw_write
+        thread_wait_condvar,
+        thread_wait_barrier
     };
     void* thread_arg[] = {
-        &mutex,
-        &spin_lock,
-        &rw_lock,
-        &rw_lock
+        &cond_var,
+        &barrier
     };
     
     int i = 0;
     for (; i < sizeof(thread)/sizeof(thread[0]); ++i) {
-        if (pthread_create(thread[i], 0, thread_func[i], thread_arg[i]) != 0) {
+        if (pthread_create(&thread[i], 0, thread_func[i], thread_arg[i]) != 0) {
             perror("[-] pthread_create");
             return -1;
         }
